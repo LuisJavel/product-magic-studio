@@ -7,6 +7,7 @@ export default function UploadProduct({ onImageUploaded }) {
   const [processedPreview, setProcessedPreview] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [processingStep, setProcessingStep] = useState(0);
+  const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const [showCamera, setShowCamera] = useState(false);
@@ -38,6 +39,7 @@ export default function UploadProduct({ onImageUploaded }) {
   };
 
   const processFile = async (file) => {
+    setError(null);
     const reader = new FileReader();
     reader.onload = async (e) => {
       setPreview(e.target.result);
@@ -46,23 +48,32 @@ export default function UploadProduct({ onImageUploaded }) {
 
       try {
         setProcessingStep(1);
-        const processedFile = await removeBackground(file);
+        const result = await removeBackground(file);
         
         setProcessingStep(2);
         
-        if (processedFile) {
+        if (result && result.error === 'insufficient_credits') {
+          setError('Credits exhausted on Pixian. Using original image.');
+          setProcessedPreview(e.target.result);
+          setProcessingStep(3);
+        } else if (result && result.error === 'failed') {
+          setError('Background removal failed. Using original image.');
+          setProcessedPreview(e.target.result);
+          setProcessingStep(3);
+        } else if (result) {
           const processedReader = new FileReader();
           processedReader.onload = (pe) => {
             setProcessedPreview(pe.target.result);
             setProcessingStep(3);
           };
-          processedReader.readAsDataURL(processedFile);
+          processedReader.readAsDataURL(result);
         } else {
           setProcessedPreview(e.target.result);
           setProcessingStep(3);
         }
-      } catch (error) {
-        console.error('Processing failed:', error);
+      } catch (err) {
+        console.error('Processing failed:', err);
+        setError('Processing error. Using original image.');
         setProcessedPreview(e.target.result);
         setProcessingStep(3);
       }
@@ -72,6 +83,7 @@ export default function UploadProduct({ onImageUploaded }) {
 
   const handleContinue = () => {
     setIsLoading(false);
+    setError(null);
     onImageUploaded(processedPreview || preview);
   };
 
@@ -109,6 +121,7 @@ export default function UploadProduct({ onImageUploaded }) {
     
     setPreview(imageData);
     setShowCamera(false);
+    setError(null);
     if (cameraStream) {
       cameraStream.getTracks().forEach(track => track.stop());
     }
@@ -117,20 +130,25 @@ export default function UploadProduct({ onImageUploaded }) {
     setProcessingStep(0);
     
     removeBackground(file)
-      .then(processedFile => {
-        if (processedFile) {
+      .then(result => {
+        if (result && result.error) {
+          setError(result.message || 'Processing failed');
+          setProcessedPreview(imageData);
+          setProcessingStep(3);
+        } else if (result) {
           const reader = new FileReader();
           reader.onload = (pe) => {
             setProcessedPreview(pe.target.result);
             setProcessingStep(3);
           };
-          reader.readAsDataURL(processedFile);
+          reader.readAsDataURL(result);
         } else {
           setProcessedPreview(imageData);
           setProcessingStep(3);
         }
       })
       .catch(() => {
+        setError('Processing error');
         setProcessedPreview(imageData);
         setProcessingStep(3);
       });
@@ -148,6 +166,7 @@ export default function UploadProduct({ onImageUploaded }) {
     setProcessedPreview(null);
     setIsLoading(false);
     setProcessingStep(0);
+    setError(null);
   };
 
   const steps = [
@@ -213,7 +232,7 @@ export default function UploadProduct({ onImageUploaded }) {
           </div>
         </div>
       ) : isLoading ? (
-        <LoadingState step={processingStep} steps={steps} />
+        <LoadingState step={processingStep} steps={steps} error={error} />
       ) : showCamera ? (
         <CameraView 
           videoRef={videoRef} 
@@ -224,6 +243,12 @@ export default function UploadProduct({ onImageUploaded }) {
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
           <h3 className="text-xl font-semibold text-gray-900 mb-6 text-center">Vista previa</h3>
           
+          {error && (
+            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-amber-700 text-sm text-center">⚠️ {error}</p>
+            </div>
+          )}
+          
           <div className="grid md:grid-cols-2 gap-6 mb-6">
             <div>
               <p className="text-sm text-gray-500 mb-2 text-center">Original</p>
@@ -232,10 +257,14 @@ export default function UploadProduct({ onImageUploaded }) {
               </div>
             </div>
             <div>
-              <p className="text-sm text-gray-500 mb-2 text-center">Sin fondo</p>
+              <p className="text-sm text-gray-500 mb-2 text-center">Procesada</p>
               <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200">
                 <img src={processedPreview} alt="Processed" className="w-full h-auto object-contain max-h-64" />
-                <div className="absolute inset-0 bg-chess-pattern opacity-10 pointer-events-none" />
+                <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
+                  backgroundImage: 'linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%)',
+                  backgroundSize: '20px 20px',
+                  backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px'
+                }} />
               </div>
             </div>
           </div>
@@ -254,7 +283,7 @@ export default function UploadProduct({ onImageUploaded }) {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              Continuar con diseño
+              Continuar al catálogo
             </button>
           </div>
         </div>
@@ -263,30 +292,43 @@ export default function UploadProduct({ onImageUploaded }) {
   );
 }
 
-function LoadingState({ step, steps }) {
+function LoadingState({ step, steps, error }) {
   const currentStep = Math.min(step, steps.length - 1);
   
   return (
     <div className="bg-white rounded-2xl shadow-xl p-12 border border-gray-100 text-center">
-      <div className="w-24 h-24 mx-auto mb-8 relative">
-        <div className="absolute inset-0 border-4 border-violet-200 rounded-full" />
-        <div className="absolute inset-0 border-4 border-violet-600 rounded-full border-t-transparent animate-spin" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-2xl">✨</span>
-        </div>
-      </div>
-      <h3 className="text-xl font-semibold text-gray-900 mb-2">
-        {steps[currentStep]?.text || 'Procesando...'}
-      </h3>
-      <p className="text-gray-500 mb-6">Esto solo tardará unos segundos</p>
-      <div className="max-w-xs mx-auto">
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-gradient-to-r from-violet-600 to-purple-600 transition-all duration-500"
-            style={{ width: `${steps[currentStep]?.progress || 0}%` }}
-          />
-        </div>
-      </div>
+      {error ? (
+        <>
+          <div className="w-16 h-16 mx-auto mb-4 bg-amber-100 rounded-full flex items-center justify-center">
+            <span className="text-2xl">⚠️</span>
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Error en el procesamiento</h3>
+          <p className="text-amber-600 mb-4">{error}</p>
+          <p className="text-gray-500 text-sm">Continuando con la imagen original...</p>
+        </>
+      ) : (
+        <>
+          <div className="w-24 h-24 mx-auto mb-8 relative">
+            <div className="absolute inset-0 border-4 border-violet-200 rounded-full" />
+            <div className="absolute inset-0 border-4 border-violet-600 rounded-full border-t-transparent animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-2xl">✨</span>
+            </div>
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            {steps[currentStep]?.text || 'Procesando...'}
+          </h3>
+          <p className="text-gray-500 mb-6">Esto solo tardará unos segundos</p>
+          <div className="max-w-xs mx-auto">
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-violet-600 to-purple-600 transition-all duration-500"
+                style={{ width: `${steps[currentStep]?.progress || 0}%` }}
+              />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

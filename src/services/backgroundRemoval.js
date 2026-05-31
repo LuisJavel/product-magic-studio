@@ -3,8 +3,8 @@ const PIXIAN_API_KEY = import.meta.env.VITE_PIXIAN_API_KEY;
 
 export async function removeBackground(imageFile) {
   if (!PIXIAN_API_KEY || PIXIAN_API_KEY === 'your-pixian-api-key-here') {
-    console.warn('Pixian API key not configured or placeholder. Using original image.');
-    return imageFile;
+    console.warn('Pixian API key not configured. Using original image.');
+    return null;
   }
 
   try {
@@ -19,6 +19,11 @@ export async function removeBackground(imageFile) {
       body: formData
     });
 
+    if (response.status === 402) {
+      console.error('Pixian API: Insufficient credits. Please top up your account.');
+      return { error: 'insufficient_credits', message: 'Credits exhausted. Please add credits to your Pixian account.' };
+    }
+
     if (!response.ok) {
       throw new Error(`Pixian API error: ${response.status}`);
     }
@@ -29,7 +34,7 @@ export async function removeBackground(imageFile) {
     });
   } catch (error) {
     console.error('Background removal failed:', error);
-    return null;
+    return { error: 'failed', message: error.message };
   }
 }
 
