@@ -84,7 +84,8 @@ export default function UploadProduct({ onImageUploaded }) {
   const handleContinue = () => {
     setIsLoading(false);
     setError(null);
-    onImageUploaded(processedPreview || preview);
+    const finalImage = processedPreview || preview;
+    onImageUploaded(finalImage);
   };
 
   const startCamera = async () => {
