@@ -49,12 +49,18 @@ export default function UploadProduct({ onImageUploaded }) {
         const processedFile = await removeBackground(file);
         
         setProcessingStep(2);
-        const processedReader = new FileReader();
-        processedReader.onload = (pe) => {
-          setProcessedPreview(pe.target.result);
+        
+        if (processedFile) {
+          const processedReader = new FileReader();
+          processedReader.onload = (pe) => {
+            setProcessedPreview(pe.target.result);
+            setProcessingStep(3);
+          };
+          processedReader.readAsDataURL(processedFile);
+        } else {
+          setProcessedPreview(e.target.result);
           setProcessingStep(3);
-        };
-        processedReader.readAsDataURL(processedFile);
+        }
       } catch (error) {
         console.error('Processing failed:', error);
         setProcessedPreview(e.target.result);
@@ -112,12 +118,17 @@ export default function UploadProduct({ onImageUploaded }) {
     
     removeBackground(file)
       .then(processedFile => {
-        const reader = new FileReader();
-        reader.onload = (pe) => {
-          setProcessedPreview(pe.target.result);
+        if (processedFile) {
+          const reader = new FileReader();
+          reader.onload = (pe) => {
+            setProcessedPreview(pe.target.result);
+            setProcessingStep(3);
+          };
+          reader.readAsDataURL(processedFile);
+        } else {
+          setProcessedPreview(imageData);
           setProcessingStep(3);
-        };
-        reader.readAsDataURL(processedFile);
+        }
       })
       .catch(() => {
         setProcessedPreview(imageData);

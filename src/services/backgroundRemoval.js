@@ -2,8 +2,8 @@ const PIXIAN_API_URL = 'https://api.pixian.ai/api/v2/remove-background';
 const PIXIAN_API_KEY = import.meta.env.VITE_PIXIAN_API_KEY;
 
 export async function removeBackground(imageFile) {
-  if (!PIXIAN_API_KEY) {
-    console.warn('Pixian API key not configured. Using original image.');
+  if (!PIXIAN_API_KEY || PIXIAN_API_KEY === 'your-pixian-api-key-here') {
+    console.warn('Pixian API key not configured or placeholder. Using original image.');
     return imageFile;
   }
 
@@ -14,7 +14,7 @@ export async function removeBackground(imageFile) {
     const response = await fetch(PIXIAN_API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': 'Basic ' + btoa(PIXIAN_API_KEY + ':')
+        'Authorization': 'Basic ' + btoa(PIXIAN_API_KEY)
       },
       body: formData
     });
@@ -29,13 +29,18 @@ export async function removeBackground(imageFile) {
     });
   } catch (error) {
     console.error('Background removal failed:', error);
-    throw error;
+    return null;
   }
 }
 
 export async function removeBackgroundFromDataURL(dataURL) {
-  const response = await fetch(dataURL);
-  const blob = await response.blob();
-  const file = new File([blob], 'image.png', { type: 'image/png' });
-  return removeBackground(file);
+  try {
+    const response = await fetch(dataURL);
+    const blob = await response.blob();
+    const file = new File([blob], 'image.png', { type: 'image/png' });
+    return await removeBackground(file);
+  } catch (error) {
+    console.error('Background removal from DataURL failed:', error);
+    return null;
+  }
 }
