@@ -1,13 +1,9 @@
 import { useState, useRef } from 'react';
-import { removeBackground } from '../services/backgroundRemoval';
 
 export default function UploadProduct({ onImageUploaded }) {
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [processedPreview, setProcessedPreview] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [processingStep, setProcessingStep] = useState(0);
-  const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const [showCamera, setShowCamera] = useState(false);
@@ -27,65 +23,29 @@ export default function UploadProduct({ onImageUploaded }) {
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith('image/')) {
-      processFile(file);
+      handleFile(file);
     }
   };
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (file) {
-      processFile(file);
+      handleFile(file);
     }
   };
 
-  const processFile = async (file) => {
-    setError(null);
+  const handleFile = (file) => {
     const reader = new FileReader();
-    reader.onload = async (e) => {
+    reader.onload = (e) => {
       setPreview(e.target.result);
       setIsLoading(true);
-      setProcessingStep(0);
-
-      try {
-        setProcessingStep(1);
-        const result = await removeBackground(file);
-        
-        setProcessingStep(2);
-        
-        if (result && result.error === 'insufficient_credits') {
-          setError('Credits exhausted on Pixian. Using original image.');
-          setProcessedPreview(e.target.result);
-          setProcessingStep(3);
-        } else if (result && result.error === 'failed') {
-          setError('Background removal failed. Using original image.');
-          setProcessedPreview(e.target.result);
-          setProcessingStep(3);
-        } else if (result) {
-          const processedReader = new FileReader();
-          processedReader.onload = (pe) => {
-            setProcessedPreview(pe.target.result);
-            setProcessingStep(3);
-          };
-          processedReader.readAsDataURL(result);
-        } else {
-          setProcessedPreview(e.target.result);
-          setProcessingStep(3);
-        }
-      } catch (err) {
-        console.error('Processing failed:', err);
-        setError('Processing error. Using original image.');
-        setProcessedPreview(e.target.result);
-        setProcessingStep(3);
-      }
+      
+      setTimeout(() => {
+        setIsLoading(false);
+        onImageUploaded(e.target.result);
+      }, 500);
     };
     reader.readAsDataURL(file);
-  };
-
-  const handleContinue = () => {
-    setIsLoading(false);
-    setError(null);
-    const finalImage = processedPreview || preview;
-    onImageUploaded(finalImage);
   };
 
   const startCamera = async () => {
@@ -110,49 +70,18 @@ export default function UploadProduct({ onImageUploaded }) {
     ctx.drawImage(video, 0, 0);
     const imageData = canvas.toDataURL('image/jpeg');
     
-    const byteString = atob(imageData.split(',')[1]);
-    const mimeString = imageData.split(',')[0].split(':')[1].split(';')[0];
-    const ab = new ArrayBuffer(byteString.length);
-    const ia = new Uint8Array(ab);
-    for (let i = 0; i < byteString.length; i++) {
-      ia[i] = byteString.charCodeAt(i);
-    }
-    const blob = new Blob([ab], { type: mimeString });
-    const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' });
-    
     setPreview(imageData);
     setShowCamera(false);
-    setError(null);
     if (cameraStream) {
       cameraStream.getTracks().forEach(track => track.stop());
     }
     
     setIsLoading(true);
-    setProcessingStep(0);
     
-    removeBackground(file)
-      .then(result => {
-        if (result && result.error) {
-          setError(result.message || 'Processing failed');
-          setProcessedPreview(imageData);
-          setProcessingStep(3);
-        } else if (result) {
-          const reader = new FileReader();
-          reader.onload = (pe) => {
-            setProcessedPreview(pe.target.result);
-            setProcessingStep(3);
-          };
-          reader.readAsDataURL(result);
-        } else {
-          setProcessedPreview(imageData);
-          setProcessingStep(3);
-        }
-      })
-      .catch(() => {
-        setError('Processing error');
-        setProcessedPreview(imageData);
-        setProcessingStep(3);
-      });
+    setTimeout(() => {
+      setIsLoading(false);
+      onImageUploaded(imageData);
+    }, 500);
   };
 
   const closeCamera = () => {
@@ -164,18 +93,8 @@ export default function UploadProduct({ onImageUploaded }) {
 
   const resetUpload = () => {
     setPreview(null);
-    setProcessedPreview(null);
     setIsLoading(false);
-    setProcessingStep(0);
-    setError(null);
   };
-
-  const steps = [
-    { text: 'Subiendo imagen...', progress: 25 },
-    { text: 'Eliminando fondo con IA...', progress: 50 },
-    { text: 'Optimizando resultado...', progress: 75 },
-    { text: '¡Listo!', progress: 100 }
-  ];
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -228,12 +147,19 @@ export default function UploadProduct({ onImageUploaded }) {
             />
             
             <p className="mt-6 text-sm text-gray-400">
-              La IA eliminará el fondo automáticamente
+              La IA generará diseños profesionales de tu producto
             </p>
           </div>
         </div>
       ) : isLoading ? (
-        <LoadingState step={processingStep} steps={steps} error={error} />
+        <div className="bg-white rounded-2xl shadow-xl p-12 border border-gray-100 text-center">
+          <div className="w-20 h-20 mx-auto mb-6 relative">
+            <div className="absolute inset-0 border-4 border-violet-200 rounded-full" />
+            <div className="absolute inset-0 border-4 border-violet-600 rounded-full border-t-transparent animate-spin" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Preparando...</h3>
+          <p className="text-gray-500">Cargando tu imagen</p>
+        </div>
       ) : showCamera ? (
         <CameraView 
           videoRef={videoRef} 
@@ -242,32 +168,10 @@ export default function UploadProduct({ onImageUploaded }) {
         />
       ) : (
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          <h3 className="text-xl font-semibold text-gray-900 mb-6 text-center">Vista previa</h3>
+          <h3 className="text-xl font-semibold text-gray-900 mb-6 text-center">Tu producto</h3>
           
-          {error && (
-            <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-amber-700 text-sm text-center">⚠️ {error}</p>
-            </div>
-          )}
-          
-          <div className="grid md:grid-cols-2 gap-6 mb-6">
-            <div>
-              <p className="text-sm text-gray-500 mb-2 text-center">Original</p>
-              <div className="relative rounded-xl overflow-hidden bg-gray-100 border border-gray-200">
-                <img src={preview} alt="Original" className="w-full h-auto object-contain max-h-64" />
-              </div>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 mb-2 text-center">Procesada</p>
-              <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200">
-                <img src={processedPreview} alt="Processed" className="w-full h-auto object-contain max-h-64" />
-                <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
-                  backgroundImage: 'linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%)',
-                  backgroundSize: '20px 20px',
-                  backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px'
-                }} />
-              </div>
-            </div>
+          <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 mb-6">
+            <img src={preview} alt="Preview" className="w-full h-auto object-contain max-h-80 mx-auto" />
           </div>
           
           <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -278,57 +182,16 @@ export default function UploadProduct({ onImageUploaded }) {
               Cambiar imagen
             </button>
             <button
-              onClick={handleContinue}
+              onClick={() => onImageUploaded(preview)}
               className="px-6 py-3 bg-violet-600 text-white font-medium rounded-xl hover:bg-violet-700 transition-colors flex items-center justify-center gap-2"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
-              Continuar al catálogo
+              Generar diseños con IA
             </button>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-function LoadingState({ step, steps, error }) {
-  const currentStep = Math.min(step, steps.length - 1);
-  
-  return (
-    <div className="bg-white rounded-2xl shadow-xl p-12 border border-gray-100 text-center">
-      {error ? (
-        <>
-          <div className="w-16 h-16 mx-auto mb-4 bg-amber-100 rounded-full flex items-center justify-center">
-            <span className="text-2xl">⚠️</span>
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Error en el procesamiento</h3>
-          <p className="text-amber-600 mb-4">{error}</p>
-          <p className="text-gray-500 text-sm">Continuando con la imagen original...</p>
-        </>
-      ) : (
-        <>
-          <div className="w-24 h-24 mx-auto mb-8 relative">
-            <div className="absolute inset-0 border-4 border-violet-200 rounded-full" />
-            <div className="absolute inset-0 border-4 border-violet-600 rounded-full border-t-transparent animate-spin" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-2xl">✨</span>
-            </div>
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            {steps[currentStep]?.text || 'Procesando...'}
-          </h3>
-          <p className="text-gray-500 mb-6">Esto solo tardará unos segundos</p>
-          <div className="max-w-xs mx-auto">
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-violet-600 to-purple-600 transition-all duration-500"
-                style={{ width: `${steps[currentStep]?.progress || 0}%` }}
-              />
-            </div>
-          </div>
-        </>
       )}
     </div>
   );
