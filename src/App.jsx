@@ -57,12 +57,8 @@ function App() {
     setCurrentPage('create');
   };
 
-  const handleStyleSelect = (styleId) => {
-    setGeneratedDesigns([
-      { id: 1, type: 'instagram', gradient: 'from-pink-500 to-rose-500' },
-      { id: 2, type: 'story', gradient: 'from-violet-600 to-purple-700' },
-      { id: 3, type: 'banner', gradient: 'from-blue-500 to-cyan-500' }
-    ]);
+  const handleStyleSelect = (variations) => {
+    setGeneratedDesigns(variations);
     setCurrentPage('results');
   };
 
@@ -172,7 +168,7 @@ function App() {
             <UploadProduct onImageUploaded={handleImageUploaded} />
             {uploadedImage && (
               <div className="mt-10">
-                <StyleSelector onStyleSelect={handleStyleSelect} />
+                <StyleSelector productImage={uploadedImage} onGenerate={handleStyleSelect} />
               </div>
             )}
           </div>
@@ -187,7 +183,7 @@ function App() {
               <p className="text-gray-500">Aquí tienes 3 diseños diferentes listos para usar</p>
             </div>
             {uploadedImage && (
-              <ResultGallery imageUrl={uploadedImage} onEdit={handleEditDesign} />
+              <ResultGallery designs={generatedDesigns} imageUrl={uploadedImage} onEdit={handleEditDesign} />
             )}
             <div className="text-center mt-10">
               <button 

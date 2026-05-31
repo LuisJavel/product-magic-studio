@@ -5,4 +5,4 @@ export { designsService } from './designs';
 export { productImagesService } from './productImages';
 export { styleTemplatesService } from './styleTemplates';
 export { removeBackground, removeBackgroundFromDataURL } from './backgroundRemoval';
-export { generateDesignSuggestions, enhanceProductImage, generateMarketingText } from './geminiService';
+export { generateDesignSuggestions, generateDesignVariations, enhanceWithGemini, generateMarketingText } from './geminiService';
