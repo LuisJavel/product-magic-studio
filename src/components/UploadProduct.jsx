@@ -1,9 +1,12 @@
 import { useState, useRef } from 'react';
+import { removeBackground } from '../services/backgroundRemoval';
 
 export default function UploadProduct({ onImageUploaded }) {
   const [isDragging, setIsDragging] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [processedPreview, setProcessedPreview] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [processingStep, setProcessingStep] = useState(0);
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const [showCamera, setShowCamera] = useState(false);
@@ -34,17 +37,36 @@ export default function UploadProduct({ onImageUploaded }) {
     }
   };
 
-  const processFile = (file) => {
+  const processFile = async (file) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       setPreview(e.target.result);
       setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
-        onImageUploaded(e.target.result);
-      }, 2500);
+      setProcessingStep(0);
+
+      try {
+        setProcessingStep(1);
+        const processedFile = await removeBackground(file);
+        
+        setProcessingStep(2);
+        const processedReader = new FileReader();
+        processedReader.onload = (pe) => {
+          setProcessedPreview(pe.target.result);
+          setProcessingStep(3);
+        };
+        processedReader.readAsDataURL(processedFile);
+      } catch (error) {
+        console.error('Processing failed:', error);
+        setProcessedPreview(e.target.result);
+        setProcessingStep(3);
+      }
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleContinue = () => {
+    setIsLoading(false);
+    onImageUploaded(processedPreview || preview);
   };
 
   const startCamera = async () => {
@@ -68,16 +90,39 @@ export default function UploadProduct({ onImageUploaded }) {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0);
     const imageData = canvas.toDataURL('image/jpeg');
+    
+    const byteString = atob(imageData.split(',')[1]);
+    const mimeString = imageData.split(',')[0].split(':')[1].split(';')[0];
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    const blob = new Blob([ab], { type: mimeString });
+    const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' });
+    
     setPreview(imageData);
     setShowCamera(false);
     if (cameraStream) {
       cameraStream.getTracks().forEach(track => track.stop());
     }
+    
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      onImageUploaded(imageData);
-    }, 2500);
+    setProcessingStep(0);
+    
+    removeBackground(file)
+      .then(processedFile => {
+        const reader = new FileReader();
+        reader.onload = (pe) => {
+          setProcessedPreview(pe.target.result);
+          setProcessingStep(3);
+        };
+        reader.readAsDataURL(processedFile);
+      })
+      .catch(() => {
+        setProcessedPreview(imageData);
+        setProcessingStep(3);
+      });
   };
 
   const closeCamera = () => {
@@ -86,6 +131,20 @@ export default function UploadProduct({ onImageUploaded }) {
       cameraStream.getTracks().forEach(track => track.stop());
     }
   };
+
+  const resetUpload = () => {
+    setPreview(null);
+    setProcessedPreview(null);
+    setIsLoading(false);
+    setProcessingStep(0);
+  };
+
+  const steps = [
+    { text: 'Subiendo imagen...', progress: 25 },
+    { text: 'Eliminando fondo con IA...', progress: 50 },
+    { text: 'Optimizando resultado...', progress: 75 },
+    { text: '¡Listo!', progress: 100 }
+  ];
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -138,12 +197,12 @@ export default function UploadProduct({ onImageUploaded }) {
             />
             
             <p className="mt-6 text-sm text-gray-400">
-              La IA eliminará el fondo y preparará tu producto para diseñarlo
+              La IA eliminará el fondo automáticamente
             </p>
           </div>
         </div>
       ) : isLoading ? (
-        <LoadingState />
+        <LoadingState step={processingStep} steps={steps} />
       ) : showCamera ? (
         <CameraView 
           videoRef={videoRef} 
@@ -152,16 +211,39 @@ export default function UploadProduct({ onImageUploaded }) {
         />
       ) : (
         <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-          <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">Vista previa</h3>
-          <div className="relative rounded-xl overflow-hidden mb-6">
-            <img src={preview} alt="Preview" className="w-full h-auto object-contain max-h-96" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-6 text-center">Vista previa</h3>
+          
+          <div className="grid md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <p className="text-sm text-gray-500 mb-2 text-center">Original</p>
+              <div className="relative rounded-xl overflow-hidden bg-gray-100 border border-gray-200">
+                <img src={preview} alt="Original" className="w-full h-auto object-contain max-h-64" />
+              </div>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500 mb-2 text-center">Sin fondo</p>
+              <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200">
+                <img src={processedPreview} alt="Processed" className="w-full h-auto object-contain max-h-64" />
+                <div className="absolute inset-0 bg-chess-pattern opacity-10 pointer-events-none" />
+              </div>
+            </div>
           </div>
-          <div className="flex justify-center">
+          
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button
-              onClick={() => { setPreview(null); }}
+              onClick={resetUpload}
               className="px-6 py-3 bg-gray-100 text-gray-700 font-medium rounded-xl hover:bg-gray-200 transition-colors"
             >
               Cambiar imagen
+            </button>
+            <button
+              onClick={handleContinue}
+              className="px-6 py-3 bg-violet-600 text-white font-medium rounded-xl hover:bg-violet-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Continuar con diseño
             </button>
           </div>
         </div>
@@ -170,36 +252,27 @@ export default function UploadProduct({ onImageUploaded }) {
   );
 }
 
-function LoadingState() {
-  const steps = [
-    { text: 'Eliminando fondo...', progress: 33 },
-    { text: 'Analizando producto...', progress: 66 },
-    { text: 'Generando diseños...', progress: 100 }
-  ];
-  const [currentStep, setCurrentStep] = useState(0);
-
-  useState(() => {
-    const interval = setInterval(() => {
-      setCurrentStep(prev => (prev + 1) % 3);
-    }, 800);
-    return () => clearInterval(interval);
-  }, []);
-
+function LoadingState({ step, steps }) {
+  const currentStep = Math.min(step, steps.length - 1);
+  
   return (
     <div className="bg-white rounded-2xl shadow-xl p-12 border border-gray-100 text-center">
       <div className="w-24 h-24 mx-auto mb-8 relative">
         <div className="absolute inset-0 border-4 border-violet-200 rounded-full" />
         <div className="absolute inset-0 border-4 border-violet-600 rounded-full border-t-transparent animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className="text-2xl">✨</span>
+        </div>
       </div>
       <h3 className="text-xl font-semibold text-gray-900 mb-2">
-        {steps[currentStep].text}
+        {steps[currentStep]?.text || 'Procesando...'}
       </h3>
       <p className="text-gray-500 mb-6">Esto solo tardará unos segundos</p>
       <div className="max-w-xs mx-auto">
         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
           <div 
             className="h-full bg-gradient-to-r from-violet-600 to-purple-600 transition-all duration-500"
-            style={{ width: `${steps[currentStep].progress}%` }}
+            style={{ width: `${steps[currentStep]?.progress || 0}%` }}
           />
         </div>
       </div>

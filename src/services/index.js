@@ -4,3 +4,4 @@ export { profilesService } from './profiles';
 export { designsService } from './designs';
 export { productImagesService } from './productImages';
 export { styleTemplatesService } from './styleTemplates';
+export { removeBackground, removeBackgroundFromDataURL } from './backgroundRemoval';
